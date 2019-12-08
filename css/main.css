@@ -1,0 +1,43 @@
+.textCom{
+	position: relative;
+	background-color: #FFF5EE;
+	height: 12.5rem;
+	width: 37.5rem;
+	margin-bottom: 1.25rem;
+	border-radius: 10px;
+	box-shadow: 5px 5px 10px 5px #CCCCCC;
+	color: ;
+	}
+button{
+	position: absolute;
+	left: 6.25rem;
+	top: .5rem;
+	height: 4rem;
+	width: 4rem;
+	border: none;
+	background-color: #FFF5EE;
+	border-radius: 0.625rem;
+}
+#addContent{
+	position: absolute;
+	height: 25rem;
+	width: 25rem;
+	font-size: 2.375rem;
+	background: #CCCCCC;
+}
+#addContent select{
+	padding-right: 1.8rem;
+	color: #afbac0;
+	font-size: 1.6rem;
+	border: none;
+	outline: none;
+	/*去掉默认的下拉三角*/
+	appearance:none;  
+	-moz-appearance:none;  
+	-webkit-appearance:none;
+	/*添加下拉三角图标*/
+	background: url("../img/task5-2_07.jpg") no-repeat right center transparent;
+}
+#addContent button{
+	left: 20rem;
+}
