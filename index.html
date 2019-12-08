@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<title></title>
+		<script src="js/vue.min.js" type="text/javascript" charset="utf-8"></script>
+		<link rel="stylesheet" href="css/main.css">
+	</head>
+	<body>
+		<div id="content">
+			<div v-if="!showadd">
+				<h3>个人主页</h3>
+				<button v-on:click="show1">Add</button>
+				<div v-for="(infor,i) in userdata">
+				</div>
+				<textcom></textcom>
+				<linkcom></linkcom>
+				<imgcom></imgcom>
+				<videocom></videocom>
+			</div>
+			<div id="addContent" v-if="showadd">
+				选择类型<select v-model="selected">
+							<option v-for="option in options" v-bind:value="option.value">
+								{{ option.text }}
+							</option>
+						</select>
+						<div class="showaddtype">
+							<p>{{selected}}</p>
+							<input v-model="message" placeholder="edit me">
+						</div>
+					<button type="button" v-on:click="show2">确定</button>
+			</div>
+		</div>
+	<script>
+		Vue.component('textcom', {
+		  template: '<div class="textCom"><div class="textContent">文字模板</div></div>'
+		})
+		Vue.component('imgcom', {
+		  template: '<div class="textCom"><div class="textContent">图片模板</div></div>'
+		})
+		Vue.component('linkcom', {
+		  template: '<div class="textCom"><div class="textContent">链接模板</div></div>'
+		})
+		Vue.component('videocom', {
+		  template: '<div class="textCom"><div class="textContent">视频模板</div></div>'
+		})
+		var content=new Vue({
+		  el: '#content',
+		  data:{
+			  message:"",
+			  showadd:false,
+			  selectType:'link',
+			  finsh:false,
+			  selected: 'text',
+			  userdata:[
+				  {
+					  type:"text",value:"测试文字",
+				  },
+				  {
+					  type:"img",value:"测试文字",
+				  }
+			  ],
+			  newdata:[
+				  
+			  ],
+			  options: [
+			    { text: '文字模板', value: 'text' },
+			    { text: '图片模板', value: 'img' },
+			    { text: '链接模板', value: 'link'},
+				{ text: '视频模板', value: 'video'}
+			  ]
+		  },
+		  methods:{
+			  show1:function () {
+			  	this.$data.showadd=true;
+			  },
+			  show2:function(){
+				 console.log(this.userdata);
+				 var datainfor={text: this.$data.selectType, value: this.$data.message};
+				 this.$data.newdata=datainfor;
+				 this.$data.userdata.splice(0,0,datainfor);
+				 this.$data.showadd=false; 
+				 console.log(this.userdata);
+				 this.$forceUpdate()
+				 this.finsh=true
+			  },
+			  showaddtype:function(type){
+				  this.$data.selectType=type;
+				  console.log(this.selectType);
+
+			  },
+			  showCom:function(type){
+				  console.log(type)
+				  if(type=='text')
+				  return "<div class=\"textCom\"><div class=\"textContent\">文字模板</div></div>"
+				  else if(type=='img'){
+					 return "<div class=\"textCom\"><div class=\"textContent\">图片模板</div></div>"
+				  }
+				  else if(type=='link'){
+				  	return "<div class=\"textCom\"><div class=\"textContent\">链接模板</div></div>"				  
+				  }
+				  else if(type=='video'){
+				  	return "<div class=\"textCom\"><div class=\"textContent\">视频模板</div></div>"				  
+				  }
+			  }
+			  
+		  }
+		})
+	</script>
+	</body>
+</html>
