@@ -1,0 +1,57 @@
+void TransCode()
+{
+    HRESULT hr = S_OK;
+    //////////////////////////////////////////////////
+    // Create the source reader to read the input file.
+    if (SUCCEEDED(hr))
+    {
+        hr = MFCreateSourceReaderFromURL(
+            //L"http://netclass.csu.edu.cn/jpkc2012/csu/multimedia/jalx/mmx.wmv",
+            wszSourceFile,
+            NULL,
+            &pReader
+        );
+
+        if (FAILED(hr))
+        {
+            return;
+        }
+    }
+    // open the output wave file so as to write decoded data
+    if (SUCCEEDED(hr))
+    {
+        hFile = CreateFile(
+            wszTargetFile,
+            GENERIC_WRITE,
+            FILE_SHARE_READ,
+            NULL,
+            CREATE_ALWAYS,
+            0,
+            NULL
+        );
+
+        if (hFile == INVALID_HANDLE_VALUE)
+        {
+            hr = HRESULT_FROM_WIN32(GetLastError());
+            return;
+        }
+    }
+    // write wave file
+    if (SUCCEEDED(hr))
+    {
+        hr = WriteWaveFile(pReader, hFile, MAX_AUDIO_DURATION_MSEC);
+    }
+
+    if (FAILED(hr))
+    {
+        return;
+    }
+    // close file
+    if (hFile != INVALID_HANDLE_VALUE)
+    {
+        CloseHandle(hFile);
+    }
+
+    SafeRelease(&pReader);
+    ///////////////////////////////////
+}
