@@ -1,163 +1,146 @@
-// try.cpp : Defines the entry point for the application.
+// SoundController.cpp : 定义应用程序的入口点。
 //
+#include "framework.h"
+#include "SoundController.h"
+#define MAX_LOADSTRING 100
 
-#include "stdafx.h"
-#include "try.h"
 
-template <class T> void SafeRelease(T **ppT)
-{
-    if (*ppT)
-    {
+HINSTANCE hInst;                                // 当前实例
+WCHAR szTitle[MAX_LOADSTRING];                  // 标题栏文本
+WCHAR szWindowClass[MAX_LOADSTRING];            // 主窗口类名
+// 全局变量:
+IMFMediaSession   *m_pSession;
+IMFMediaSession* m_pSession1;
+IMFSourceResolver* m_pSourceResolver;
+IUnknown* pSource = NULL;
+IMFMediaSource* m_pSource;
+IMFTopology* m_pTopology = NULL;
+IMFPresentationDescriptor* m_pSourcePD = NULL;
+DWORD cSourceStream = 0;
+IMFTopologyNode* pSourceNode = NULL;//源节点
+IMFTopologyNode* pOutPutNode = NULL;//输出节点
+IMFActivate* pSinkActivate = NULL;
+IMFStreamDescriptor* pSD = NULL;
+IMFMediaTypeHandler* pHandler = NULL;
+IMFActivate* pActivate = NULL;
+PROPVARIANT var;
+//转码
+
+WCHAR* wszSourceFile = NULL;
+
+const WCHAR* wszTargetFile = L"out1.wav";
+const WCHAR* wszTargetFile2 = L"out2.wav";
+BYTE* Bits = NULL;
+const LONG MAX_AUDIO_DURATION_MSEC = 246000; // 90 seconds
+IMFSourceReader* pReader = NULL;
+IMFSourceReader* pReaderAnother = NULL;
+HANDLE hFile = INVALID_HANDLE_VALUE;
+HANDLE hFile2 = INVALID_HANDLE_VALUE;
+
+
+// 此代码模块中包含的函数的前向声明:
+ATOM                MyRegisterClass(HINSTANCE hInstance);
+BOOL                InitInstance(HINSTANCE, int);
+LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
+INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
+void CreateMediaSession(HWND hWnd);
+void CreateMediaSession1(HWND hWnd);
+//转码模块
+template<class T>void SafeRelease(T** ppT) {
+    if (*ppT) {
         (*ppT)->Release();
         *ppT = NULL;
     }
 }
-
-HRESULT WriteWaveFile(IMFSourceReader*, HANDLE, LONG); 
+HRESULT WriteWaveFile(IMFSourceReader*, HANDLE, LONG);
 HRESULT ConfigureAudioStream(IMFSourceReader*, IMFMediaType**);
 HRESULT WriteWaveHeader(HANDLE, IMFMediaType*, DWORD*);
-DWORD   CalculateMaxAudioDataSize(IMFMediaType*, DWORD, DWORD);
+DWORD CalculateMaxAudioDataSize(IMFMediaType*, DWORD, DWORD);
 HRESULT WriteWaveData(HANDLE, IMFSourceReader*, DWORD, DWORD*);
 HRESULT FixUpChunkSizes(HANDLE, DWORD, DWORD);
 HRESULT WriteToFile(HANDLE, void*, DWORD);
-
 void OnFileOpen(HWND);
-void OnPaint(HWND);
 void TransCode();
 
-#define MAX_LOADSTRING 100
-
-// Global Variables:
-HINSTANCE hInst;								// current instance
-TCHAR szTitle[MAX_LOADSTRING];					// The title bar text
-TCHAR szWindowClass[MAX_LOADSTRING];			// the main window class name
-
-WCHAR *wszSourceFile = NULL;
-const WCHAR *wszTargetFile = L"out.wav";
-const LONG MAX_AUDIO_DURATION_MSEC = 246000; // 4m 6econds
-
-IMFSourceReader *pReader = NULL;
-
-//add another source reader
-IMFSourceReader *pReaderAnother = NULL;
-
-HANDLE hFile = INVALID_HANDLE_VALUE;
-
-
-// Forward declarations of functions included in this code module:
-ATOM				MyRegisterClass(HINSTANCE hInstance);
-BOOL				InitInstance(HINSTANCE, int);
-LRESULT CALLBACK	WndProc(HWND, UINT, WPARAM, LPARAM);
-INT_PTR CALLBACK	About(HWND, UINT, WPARAM, LPARAM);
-
-
-int APIENTRY _tWinMain(HINSTANCE hInstance,
-                     HINSTANCE hPrevInstance,
-                     LPTSTR    lpCmdLine,
-                     int       nCmdShow)
+int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
+                     _In_opt_ HINSTANCE hPrevInstance,
+                     _In_ LPWSTR    lpCmdLine,
+                     _In_ int       nCmdShow)
 {
-	UNREFERENCED_PARAMETER(hPrevInstance);
-	UNREFERENCED_PARAMETER(lpCmdLine);
+    UNREFERENCED_PARAMETER(hPrevInstance);
+    UNREFERENCED_PARAMETER(lpCmdLine);
 
- 	// TODO: Place code here.
-	MSG msg;
-	HACCEL hAccelTable;
-	HRESULT hr = S_OK;
-	
-	///////////////////////////////////////////////////////
-	//
-	// Initialize the COM library.
-            hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    // TODO: 在此处放置代码。
+    // 初始化全局字符串
+    LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
+    LoadStringW(hInstance, IDC_SOUNDCONTROLLER, szWindowClass, MAX_LOADSTRING);
+    MyRegisterClass(hInstance);
 
-    // Intialize the Media Foundation platform.
-            if (SUCCEEDED(hr))
-            {
-                hr = MFStartup(MF_VERSION);
-            }
-	//
+    // 执行应用程序初始化:
+    if (!InitInstance (hInstance, nCmdShow))
+    {
+        return FALSE;
+    }
 
-	////////////////////////////////////////////////////////
+    HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_SOUNDCONTROLLER));
 
-	// Initialize global strings
-	LoadString(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
-	LoadString(hInstance, IDC_TRY, szWindowClass, MAX_LOADSTRING);
-	MyRegisterClass(hInstance);
+    MSG msg;
 
-	// Perform application initialization:
-	if (!InitInstance (hInstance, nCmdShow))
-	{
-		return FALSE;
-	}
+    // 主消息循环:
+    while (GetMessage(&msg, nullptr, 0, 0))
+    {
+        if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg))
+        {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+    }
 
-	hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_TRY));
-
-	// Main message loop:
-	while (GetMessage(&msg, NULL, 0, 0))
-	{
-		if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg))
-		{
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
-		}
-	}
-	//close MF、COM
-	MFShutdown();
-    CoUninitialize();
- 	return (int) msg.wParam;
+    return (int) msg.wParam;
 }
 
-/////////////////////////////////////////////////////////////////////////////////
-//  FUNCTION: MyRegisterClass()
+
+//  函数: MyRegisterClass()
 //
-//  PURPOSE: Registers the window class.
+//  目标: 注册窗口类。
 //
-//  COMMENTS:
-//
-//    This function and its usage are only necessary if you want this code
-//    to be compatible with Win32 systems prior to the 'RegisterClassEx'
-//    function that was added to Windows 95. It is important to call this function
-//    so that the application will get 'well formed' small icons associated
-//    with it.
-/////////////////////////////////////////////////////////////////////////////////
 ATOM MyRegisterClass(HINSTANCE hInstance)
 {
-	WNDCLASSEX wcex;
+    WNDCLASSEXW wcex;
 
-	wcex.cbSize = sizeof(WNDCLASSEX);
+    wcex.cbSize = sizeof(WNDCLASSEX);
 
-	wcex.style			= CS_HREDRAW | CS_VREDRAW;
-	wcex.lpfnWndProc	= WndProc;
-	wcex.cbClsExtra		= 0;
-	wcex.cbWndExtra		= 0;
-	wcex.hInstance		= hInstance;
-	wcex.hIcon			= LoadIcon(hInstance, MAKEINTRESOURCE(IDI_TRY));
-	wcex.hCursor		= LoadCursor(NULL, IDC_ARROW);
-	wcex.hbrBackground	= (HBRUSH)(COLOR_WINDOW+1);
-	wcex.lpszMenuName	= MAKEINTRESOURCE(IDC_TRY);
-	wcex.lpszClassName	= szWindowClass;
-	wcex.hIconSm		= LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_SMALL));
-	
-	return RegisterClassEx(&wcex);
+    wcex.style          = CS_HREDRAW | CS_VREDRAW;
+    wcex.lpfnWndProc    = WndProc;
+    wcex.cbClsExtra     = 0;
+    wcex.cbWndExtra     = 0;
+    wcex.hInstance      = hInstance;
+    wcex.hIcon          = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_SOUNDCONTROLLER));
+    wcex.hCursor        = LoadCursor(nullptr, IDC_ARROW);
+    wcex.hbrBackground  = (HBRUSH)(COLOR_WINDOW+1);
+    wcex.lpszMenuName   = MAKEINTRESOURCEW(IDC_SOUNDCONTROLLER);
+    wcex.lpszClassName  = szWindowClass;
+    wcex.hIconSm        = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_SMALL));
+
+    return RegisterClassExW(&wcex);
 }
 
 //
-//   FUNCTION: InitInstance(HINSTANCE, int)
+//   函数: InitInstance(HINSTANCE, int)
 //
-//   PURPOSE: Saves instance handle and creates main window
+//   目标: 保存实例句柄并创建主窗口
 //
-//   COMMENTS:
+//   注释:
 //
-//        In this function, we save the instance handle in a global variable and
-//        create and display the main program window.
+//        在此函数中，我们在全局变量中保存实例句柄并
+//        创建和显示主程序窗口。
 //
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
-   HWND hWnd;
+   hInst = hInstance; // 将实例句柄存储在全局变量中
 
-   hInst = hInstance; // Store instance handle in our global variable
-
-   hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
-      300, 60, 360/*CW_USEDEFAULT*/, 560, NULL, NULL, hInstance, NULL);
+   HWND hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
+      CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
 
    if (!hWnd)
    {
@@ -166,188 +149,215 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
    ShowWindow(hWnd, nCmdShow);
    UpdateWindow(hWnd);
-
+   CreateMediaSession(hWnd);
+   CreateMediaSession1(hWnd);
    return TRUE;
 }
 
 //
-//  FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
+//  函数: WndProc(HWND, UINT, WPARAM, LPARAM)
 //
-//  PURPOSE:  Processes messages for the main window.
+//  目标: 处理主窗口的消息。
 //
-//  WM_COMMAND	- process the application menu
-//  WM_PAINT	- Paint the main window
-//  WM_DESTROY	- post a quit message and return
+//  WM_COMMAND  - 处理应用程序菜单
+//  WM_PAINT    - 绘制主窗口
+//  WM_DESTROY  - 发送退出消息并返回
 //
 //
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
-	int wmId, wmEvent;
-		
-	switch (message)
-	{
-	case WM_COMMAND:
-		wmId    = LOWORD(wParam);
-		wmEvent = HIWORD(wParam);
-		// Parse the menu selections:
-		switch (wmId)
-		{
-		case IDM_ABOUT:
-			DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
-			break;
-        case ID_FILE_INPUT:
-			OnFileOpen(hWnd);
-			break;
-
-		case IDM_RUN:
-			TransCode();
-			break;
-
-		case ID_PLAY_OUTPUT:
-			PlaySound(L"out.wav",NULL,SND_ASYNC|SND_NOSTOP);
-			break;
-
-		case IDM_EXIT:
-			DestroyWindow(hWnd);
-			break;
-		default:
-			return DefWindowProc(hWnd, message, wParam, lParam);
-		}
-		break;
-	case WM_PAINT:
-		OnPaint(hWnd);
-		break;
-	case WM_DESTROY:
-		PostQuitMessage(0);
-		break;
-	default:
-		return DefWindowProc(hWnd, message, wParam, lParam);
-	}
-	return 0;
+    switch (message)
+    {
+    case WM_COMMAND:
+        {
+            int wmId = LOWORD(wParam);
+            // 分析菜单选择:
+            switch (wmId)
+            {
+            case IDM_ABOUT:
+                DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
+                break;
+            case IDM_EXIT:
+                DestroyWindow(hWnd);
+                break;
+            case ID_STOP_SOUND:
+                m_pSession1->Start(NULL, &var);
+                break;
+            case ID_DISPLAY_SOUND:
+                m_pSession->Start(NULL, &var);
+                break;
+            case ID_INPUT_FILE:
+                OnFileOpen(hWnd);
+                break;
+            case ID_FLAC_TO_WAV:
+                TransCode();
+                break;
+            default:
+                return DefWindowProc(hWnd, message, wParam, lParam);
+            }
+        }
+        break;
+    case WM_PAINT:
+        {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hWnd, &ps);
+            // TODO: 在此处添加使用 hdc 的任何绘图代码...
+            EndPaint(hWnd, &ps);
+        }
+        break;
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        break;
+    default:
+        return DefWindowProc(hWnd, message, wParam, lParam);
+    }
+    return 0;
 }
 
-// Message handler for about box.
+// “关于”框的消息处理程序。
 INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
-	UNREFERENCED_PARAMETER(lParam);
-	switch (message)
-	{
-	case WM_INITDIALOG:
-		return (INT_PTR)TRUE;
+    UNREFERENCED_PARAMETER(lParam);
+    switch (message)
+    {
+    case WM_INITDIALOG:
+        return (INT_PTR)TRUE;
 
-	case WM_COMMAND:
-		if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)
-		{
-			EndDialog(hDlg, LOWORD(wParam));
-			return (INT_PTR)TRUE;
-		}
-		break;
-	}
-	return (INT_PTR)FALSE;
+    case WM_COMMAND:
+        if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)
+        {
+            EndDialog(hDlg, LOWORD(wParam));
+            return (INT_PTR)TRUE;
+        }
+        break;
+    }
+    return (INT_PTR)FALSE;
 }
 
-
-void TransCode()
+//创建媒体会话的专用函数
+void CreateMediaSession(HWND hWnd)
 {
-	HRESULT hr = S_OK;
-	        //////////////////////////////////////////////////
-			// Create the source reader to read the input file.
-            if (SUCCEEDED(hr))
-            {
-                hr = MFCreateSourceReaderFromURL(
-                //L"http://netclass.csu.edu.cn/jpkc2012/csu/multimedia/jalx/mmx.wmv",
-				wszSourceFile,
-                NULL,
-                &pReader
-                );
+    HRESULT hr;
+    //初始化mediaFoundation
+    hr = MFStartup(MF_VERSION);
+    //创建媒体会话
+    hr = MFCreateMediaSession(NULL, &m_pSession);
+    //创建源解析器
+    hr = MFCreateSourceResolver(&m_pSourceResolver);
+    MF_OBJECT_TYPE OBjectType = MF_OBJECT_INVALID;
+    hr = m_pSourceResolver->CreateObjectFromURL(
+        L"wmpaud8.wav",
+        MF_RESOLUTION_MEDIASOURCE,
+        NULL,
+        &OBjectType,
+        &pSource
+    );
+    hr = pSource->QueryInterface(IID_PPV_ARGS(&m_pSource));
+    hr = m_pSource->CreatePresentationDescriptor(&m_pSourcePD);
+    //Create a new topology
+    hr = MFCreateTopology(&m_pTopology);
+    hr = m_pSourcePD->GetStreamDescriptorCount(&cSourceStream);
+    for (DWORD i = 0; i < cSourceStream; i++) {
+        BOOL fSelected = FALSE;
+        hr = m_pSourcePD->GetStreamDescriptorByIndex(i, &fSelected, &pSD);
+        hr = pSD->GetMediaTypeHandler(&pHandler);
+        GUID guidMajorType;
+        hr = pHandler->GetMajorType(&guidMajorType);
+        if (MFMediaType_Audio == guidMajorType) {
+            hr = MFCreateAudioRendererActivate(&pActivate);
+        }
+        else if (MFMediaType_Video == guidMajorType) {
+            hr = MFCreateVideoRendererActivate(hWnd, &pActivate);
+        }
+        hr = MFCreateTopologyNode(MF_TOPOLOGY_SOURCESTREAM_NODE, &pSourceNode);
+        hr = pSourceNode->SetUnknown(MF_TOPONODE_SOURCE, m_pSource);
+        hr = pSourceNode->SetUnknown(MF_TOPONODE_PRESENTATION_DESCRIPTOR, m_pSourcePD);
+        hr = pSourceNode->SetUnknown(MF_TOPONODE_STREAM_DESCRIPTOR, pSD);
+        hr = m_pTopology->AddNode(pSourceNode);
+        //创建拓扑节点
+        hr = MFCreateTopologyNode(MF_TOPOLOGY_OUTPUT_NODE, &pOutPutNode);
+        hr = pOutPutNode->SetObject(pActivate);
+        hr = pOutPutNode->SetUINT32(MF_TOPONODE_STREAMID, 0);
+        hr = pOutPutNode->SetUINT32(MF_TOPONODE_NOSHUTDOWN_ON_REMOVE, FALSE);
+        hr = m_pTopology->AddNode(pOutPutNode);
+        hr = pSourceNode->ConnectOutput(0, pOutPutNode, 0);
 
-                if (FAILED(hr))
-                {
-                   return;
-                }
-             }
-            // open the output wave file so as to write decoded data
-			if (SUCCEEDED(hr))
-             {
-                 hFile = CreateFile(
-                 wszTargetFile,
-                 GENERIC_WRITE,
-                 FILE_SHARE_READ,
-                 NULL,
-                 CREATE_ALWAYS,
-                 0,
-                 NULL
-                 );
-
-                if (hFile == INVALID_HANDLE_VALUE)
-                {
-                   hr = HRESULT_FROM_WIN32(GetLastError());
-				   return;
-                }
-             }
-			// write wave file
-            if (SUCCEEDED(hr))
-            {
-               hr = WriteWaveFile(pReader, hFile, MAX_AUDIO_DURATION_MSEC);
-	        }
-
-            if (FAILED(hr))
-            {
-               return;
-            }
-            // close file
-            if (hFile != INVALID_HANDLE_VALUE)
-            {
-               CloseHandle(hFile);
-            }
-			
-			SafeRelease(&pReader);
-			///////////////////////////////////
+    }
+    m_pSession->SetTopology(0, m_pTopology);
 }
+//创建媒体会话的专用函数2
+void CreateMediaSession1(HWND hWnd)
+{
+    HRESULT hr;
+    //初始化mediaFoundation
+    hr = MFStartup(MF_VERSION);
+    //创建媒体会话
+    hr = MFCreateMediaSession(NULL, &m_pSession1);
+    //创建源解析器
+    hr = MFCreateSourceResolver(&m_pSourceResolver);
+    MF_OBJECT_TYPE OBjectType = MF_OBJECT_INVALID;
+    hr = m_pSourceResolver->CreateObjectFromURL(
+        L"RADWIMPS.flac",
+        MF_RESOLUTION_MEDIASOURCE,
+        NULL,
+        &OBjectType,
+        &pSource
+    );
+    hr = pSource->QueryInterface(IID_PPV_ARGS(&m_pSource));
+    hr = m_pSource->CreatePresentationDescriptor(&m_pSourcePD);
+    //Create a new topology
+    hr = MFCreateTopology(&m_pTopology);
+    hr = m_pSourcePD->GetStreamDescriptorCount(&cSourceStream);
+    for (DWORD i = 0; i < cSourceStream; i++) {
+        BOOL fSelected = FALSE;
+        hr = m_pSourcePD->GetStreamDescriptorByIndex(i, &fSelected, &pSD);
+        hr = pSD->GetMediaTypeHandler(&pHandler);
+        GUID guidMajorType;
+        hr = pHandler->GetMajorType(&guidMajorType);
+        if (MFMediaType_Audio == guidMajorType) {
+            hr = MFCreateAudioRendererActivate(&pActivate);
+        }
+        else if (MFMediaType_Video == guidMajorType) {
+            hr = MFCreateVideoRendererActivate(hWnd, &pActivate);
+        }
+        hr = MFCreateTopologyNode(MF_TOPOLOGY_SOURCESTREAM_NODE, &pSourceNode);
+        hr = pSourceNode->SetUnknown(MF_TOPONODE_SOURCE, m_pSource);
+        hr = pSourceNode->SetUnknown(MF_TOPONODE_PRESENTATION_DESCRIPTOR, m_pSourcePD);
+        hr = pSourceNode->SetUnknown(MF_TOPONODE_STREAM_DESCRIPTOR, pSD);
+        hr = m_pTopology->AddNode(pSourceNode);
+        //创建拓扑节点
+        hr = MFCreateTopologyNode(MF_TOPOLOGY_OUTPUT_NODE, &pOutPutNode);
+        hr = pOutPutNode->SetObject(pActivate);
+        hr = pOutPutNode->SetUINT32(MF_TOPONODE_STREAMID, 0);
+        hr = pOutPutNode->SetUINT32(MF_TOPONODE_NOSHUTDOWN_ON_REMOVE, FALSE);
+        hr = m_pTopology->AddNode(pOutPutNode);
+        hr = pSourceNode->ConnectOutput(0, pOutPutNode, 0);
 
-//-------------------------------------------------------------------
-// WriteWaveFile
-//
-// Writes a WAVE file by getting audio data from the source reader.
-//
-//-------------------------------------------------------------------
-
+    }
+    m_pSession1->SetTopology(0, m_pTopology);
+}
+//高层模块
 HRESULT WriteWaveFile(
-    IMFSourceReader *pReader,   // Pointer to the source reader.
-    HANDLE hFile,               // Handle to the output file.
-    LONG msecAudioData          // Maximum amount of audio data to write, in msec.
-    )
-{
+    IMFSourceReader* pReader,//指向源阅读器
+    HANDLE hFile,//处理输出文件
+    LONG msecAudioData //音频文件的最大值
+) {
     HRESULT hr = S_OK;
-
-    DWORD cbHeader = 0;         // Size of the WAVE file header, in bytes.
-    DWORD cbAudioData = 0;      // Total bytes of PCM audio data written to the file.
+    DWORD cbHeader = 0;//文件头的大小
+    DWORD cbAudioData = 0;
     DWORD cbMaxAudioData = 0;
-
-    IMFMediaType *pAudioType = NULL;    // Represents the PCM audio format.
-
-    // Configure the source reader to get uncompressed PCM audio from the source file.
+    IMFMediaType* pAudioType = NULL;
 
     hr = ConfigureAudioStream(pReader, &pAudioType);
-
-    // Write the WAVE file header.
-    if (SUCCEEDED(hr))
-    {
-        hr = WriteWaveHeader(hFile, pAudioType, &cbHeader);
+    if (SUCCEEDED(hr)) {
+        hr = WriteWaveHeader(hFile, pAudioType, &cbAudioData);
     }
-
-    // Calculate the maximum amount of audio to decode, in bytes.
-    if (SUCCEEDED(hr))
-    {
+    if (SUCCEEDED(hr)) {
+        //计算准备写入到输出文件的音频片段的最大数据量
         cbMaxAudioData = CalculateMaxAudioDataSize(pAudioType, cbHeader, msecAudioData);
-
-        // Decode audio data to the file.
         hr = WriteWaveData(hFile, pReader, cbMaxAudioData, &cbAudioData);
     }
-
-    // Fix up the RIFF headers with the correct sizes.
-    if (SUCCEEDED(hr))
-    {
+    if (SUCCEEDED(hr)) {
         hr = FixUpChunkSizes(hFile, cbHeader, cbAudioData);
     }
 
@@ -355,106 +365,58 @@ HRESULT WriteWaveFile(
     return hr;
 }
 
-
-//-------------------------------------------------------------------
-// CalculateMaxAudioDataSize
-//
-// Calculates how much audio to write to the WAVE file, given the 
-// audio format and the maximum duration of the WAVE file.
-//-------------------------------------------------------------------
-
 DWORD CalculateMaxAudioDataSize(
-    IMFMediaType *pAudioType,    // The PCM audio format.
-    DWORD cbHeader,              // The size of the WAVE file header.
-    DWORD msecAudioData          // Maximum duration, in milliseconds.
-    )
-{
-    UINT32 cbBlockSize = 0;         // Audio frame size, in bytes.
-    UINT32 cbBytesPerSecond = 0;    // Bytes per second.
-
-    // Get the audio block size and number of bytes/second from the audio format.
+    IMFMediaType* pAudioType,
+    DWORD cbHeader,
+    DWORD msecAudioData) {
+    UINT32 cbBlockSize = 0;
+    UINT32 cbBytesPerSecond = 0;
 
     cbBlockSize = MFGetAttributeUINT32(pAudioType, MF_MT_AUDIO_BLOCK_ALIGNMENT, 0);
     cbBytesPerSecond = MFGetAttributeUINT32(pAudioType, MF_MT_AUDIO_AVG_BYTES_PER_SECOND, 0);
-
-    // Calculate the maximum amount of audio data to write. 
-    // This value equals (duration in seconds x bytes/second), but cannot
-    // exceed the maximum size of the data chunk in the WAVE file.
-
-    // Size of the desired audio clip in bytes:
     DWORD cbAudioClipSize = (DWORD)MulDiv(cbBytesPerSecond, msecAudioData, 1000);
-
-    // Largest possible size of the data chunk:
     DWORD cbMaxSize = MAXDWORD - cbHeader;
-
-    // Maximum size altogether.
     cbAudioClipSize = min(cbAudioClipSize, cbMaxSize);
-
-    // Round to the audio block size, so that we do not write a partial audio frame.
     cbAudioClipSize = (cbAudioClipSize / cbBlockSize) * cbBlockSize;
-
     return cbAudioClipSize;
 }
-
-
-//-------------------------------------------------------------------
-// ConfigureAudioStream
-//
-// Selects an audio stream from the source file, and configures the
-// stream to deliver decoded PCM audio.
-//-------------------------------------------------------------------
-
 HRESULT ConfigureAudioStream(
-    IMFSourceReader *pReader,   // Pointer to the source reader.
-    IMFMediaType **ppPCMAudio   // Receives the audio format.
-    )
-{
+    IMFSourceReader* pReader,
+    IMFMediaType** ppPCMAudio
+) {
     HRESULT hr = S_OK;
-
-    IMFMediaType *pUncompressedAudioType = NULL;
-    IMFMediaType *pPartialType = NULL;
-
-    // Create a partial media type that specifies uncompressed PCM audio.
-
+    IMFMediaType* pUncompressedAudioType = NULL;
+    IMFMediaType* pPartialType = NULL;
     hr = MFCreateMediaType(&pPartialType);
-
-    if (SUCCEEDED(hr))
-    {
+    if (SUCCEEDED(hr)) {
         hr = pPartialType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
     }
-
-    if (SUCCEEDED(hr))
-    {
-        hr = pPartialType->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_PCM);
+    if (SUCCEEDED(hr)) {
+        hr = pPartialType->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_PCM);//子类型
     }
-
-    // Set this type on the source reader. The source reader will
-    // load the necessary decoder.
-    if (SUCCEEDED(hr))
-    {
+    if (SUCCEEDED(hr)) {
         hr = pReader->SetCurrentMediaType(
-            (DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM, 
+            (DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM,
             NULL,
             pPartialType
-            );
+        );
     }
-
     // Get the complete uncompressed format.
     if (SUCCEEDED(hr))
     {
         hr = pReader->GetCurrentMediaType(
-            (DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM, 
+            (DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM,
             &pUncompressedAudioType
-            );
+        );
     }
 
     // Ensure the stream is selected.
     if (SUCCEEDED(hr))
     {
         hr = pReader->SetStreamSelection(
-            (DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM, 
+            (DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM,
             TRUE
-            );
+        );
     }
 
     // Return the PCM format to the caller.
@@ -468,109 +430,65 @@ HRESULT ConfigureAudioStream(
     SafeRelease(&pPartialType);
     return hr;
 }
-
-//-------------------------------------------------------------------
-// WriteWaveHeader
-//
-// Write the WAVE file header.
-//
-// Note: This function writes placeholder values for the file size
-// and data size, as these values will need to be filled in later.
-//-------------------------------------------------------------------
-
+//输出文件头部信息的写入顺序
 HRESULT WriteWaveHeader(
-    HANDLE hFile,               // Output file.
-    IMFMediaType *pMediaType,   // PCM audio format.
-    DWORD *pcbWritten           // Receives the size of the header.    
-    )
-{
+    HANDLE hFile,
+    IMFMediaType* pMediaType,
+    DWORD* pcbWritten
+) {
     HRESULT hr = S_OK;
     UINT32 cbFormat = 0;
-
-    WAVEFORMATEX *pWav = NULL;
-
+    WAVEFORMATEX* pWav = NULL;
     *pcbWritten = 0;
 
-    // Convert the PCM audio format into a WAVEFORMATEX structure.
     hr = MFCreateWaveFormatExFromMFMediaType(
         pMediaType,
         &pWav,
         &cbFormat
-        );
-
-
-    // Write the 'RIFF' header and the start of the 'fmt ' chunk.
-
-    if (SUCCEEDED(hr))
-    {
-        DWORD header[] = { 
-            // RIFF header
-            FCC('RIFF'), 
-            0, 
-            FCC('WAVE'),  
-            // Start of 'fmt ' chunk
-            FCC('fmt '), 
-            cbFormat 
+    );
+    if (SUCCEEDED(hr)) {
+        DWORD header[] = {
+            FCC('RIFF'),
+            0,
+            FCC('WAVE'),//fmt chunk 的开始
+            FCC('fmt'),
+            cbFormat
         };
-
-        DWORD dataHeader[] = { FCC('data'), 0 };
-
+        DWORD dataHeader[] = { FCC('data'),0 };
         hr = WriteToFile(hFile, header, sizeof(header));
-
-        // Write the WAVEFORMATEX structure.
-        if (SUCCEEDED(hr))
-        {
+        if (SUCCEEDED(hr)) {
             hr = WriteToFile(hFile, pWav, cbFormat);
         }
-
-        // Write the start of the 'data' chunk
-
-        if (SUCCEEDED(hr))
-        {
+        if (SUCCEEDED(hr)) {
             hr = WriteToFile(hFile, dataHeader, sizeof(dataHeader));
         }
-
-        if (SUCCEEDED(hr))
-        {
+        if (SUCCEEDED(hr)) {
             *pcbWritten = sizeof(header) + cbFormat + sizeof(dataHeader);
         }
     }
-
-
     CoTaskMemFree(pWav);
     return hr;
 }
-
-//-------------------------------------------------------------------
-// WriteWaveData
-//
-// Decodes PCM audio data from the source file and writes it to 
-// the WAVE file.
-//-------------------------------------------------------------------
-
+//写入音频数据
 HRESULT WriteWaveData(
-    HANDLE hFile,               // Output file.
-    IMFSourceReader *pReader,   // Source reader.
-    DWORD cbMaxAudioData,       // Maximum amount of audio data (bytes).
-    DWORD *pcbDataWritten       // Receives the amount of data written.
-    )
-{
+    HANDLE hFile,
+    //HANDLE hFile2,
+    IMFSourceReader* pReader,
+    //IMFSourceReader* pReaderAnother,
+    DWORD cbMaxAudioData,
+    //DWORD cbMaxAudioDataAnother,
+    DWORD* pcbDataWritten){
+    //DWORD* pcbDataWrittenAnother) {
+
     HRESULT hr = S_OK;
     DWORD cbAudioData = 0;
     DWORD cbBuffer = 0;
-    BYTE *pAudioData = NULL;
-
-    IMFSample *pSample = NULL;
-    IMFMediaBuffer *pBuffer = NULL;
-
-    // Get audio samples from the source reader.
-    while (true)
-    {
-        Sleep(10);
-		
-		DWORD dwFlags = 0;
-
-        // Read the next sample.
+    BYTE* pAudioData = NULL;
+    DWORD cbBufferAnother = 0;
+    IMFSample* pSample = NULL;
+    IMFMediaBuffer* pBuffer = NULL;
+    while (true) {
+        DWORD dwFlags = 0;
         hr = pReader->ReadSample(
             (DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM,
             0,
@@ -578,190 +496,110 @@ HRESULT WriteWaveData(
             &dwFlags,
             NULL,
             &pSample
-            );
-
+        );
         if (FAILED(hr)) { break; }
-
-        if (dwFlags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED)
-        {
-            printf("Type change - not supported by WAVE file format.\n");
+        if (dwFlags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED) {
             break;
         }
-        if (dwFlags & MF_SOURCE_READERF_ENDOFSTREAM)
-        {
-            printf("End of input file.\n");
+        if (dwFlags & MF_SOURCE_READERF_ENDOFSTREAM) {
             break;
         }
-
-        if (pSample == NULL)
-        {
-            printf("No sample\n");
+        if (pSample == NULL) {
             continue;
         }
-        
-        // Get a pointer to the audio data in the sample.
-		hr = pSample->ConvertToContiguousBuffer(&pBuffer);
-		if (FAILED(hr)) { break; }
-
-		hr = pBuffer->Lock(&pAudioData, NULL, &cbBuffer);
-		if (FAILED(hr)) { break; }
-			
-        // Make sure not to exceed the specified maximum size.
-        if (cbMaxAudioData - cbAudioData < cbBuffer)
-        {
+        hr = pSample->ConvertToContiguousBuffer(&pBuffer);
+        if (FAILED(hr)) { break; }
+        //锁定内存，得到缓冲地址指针
+        hr = pBuffer->Lock(&pAudioData, NULL, &cbBuffer);
+        if (FAILED(hr)) { break; }
+        if (cbMaxAudioData - cbAudioData < cbBuffer) {
             cbBuffer = cbMaxAudioData - cbAudioData;
         }
-
-        // Write this data to the output file.
-		// 在输出音频数据之前，可以在这里添加数据处理模块
-		for(int i=0;i<cbBuffer;i++)
-		{
-            //自定义处理代码		
-		}
-
-		//pAudioData
-
         hr = WriteToFile(hFile, pAudioData, cbBuffer);
-
-        if (FAILED(hr)) { break; }
-
-        // Unlock the buffer.
-
         hr = pBuffer->Unlock();
         pAudioData = NULL;
-
         if (FAILED(hr)) { break; }
-
-        // Update running total of audio data.
         cbAudioData += cbBuffer;
-
-        if (cbAudioData >= cbMaxAudioData)
-        {
+        if (cbAudioData >= cbMaxAudioData) {
             break;
         }
-
-        SafeRelease(&pSample);
-        SafeRelease(&pBuffer);
     }
-
-	//SafeRelease(&pSample);
-    //SafeRelease(&pBuffer);
-
-    if (SUCCEEDED(hr))
-    {
-        MessageBox(NULL,L"success to write",L"message",NULL);
-
+    SafeRelease(&pSample);
+    SafeRelease(&pBuffer);
+    if (SUCCEEDED(hr)) {
+        MessageBox(NULL, L"success to write file1", L"message", NULL);
         *pcbDataWritten = cbAudioData;
     }
-
-    if (pAudioData)
-    {
+    if (pAudioData) {
         pBuffer->Unlock();
     }
-
     SafeRelease(&pBuffer);
     SafeRelease(&pSample);
     return hr;
 }
-
-//-------------------------------------------------------------------
-// FixUpChunkSizes
 //
-// Writes the file-size information into the WAVE file header.
-//
-// WAVE files use the RIFF file format. Each RIFF chunk has a data
-// size, and the RIFF header has a total file size.
-//-------------------------------------------------------------------
-
 HRESULT FixUpChunkSizes(
-    HANDLE hFile,           // Output file.
-    DWORD cbHeader,         // Size of the 'fmt ' chuck.
-    DWORD cbAudioData       // Size of the 'data' chunk.
-    )
-{
+    HANDLE hFile,
+    DWORD cbHeader,
+    DWORD cbAudioData) {
     HRESULT hr = S_OK;
-
-    LARGE_INTEGER Lar;
-    Lar.QuadPart = cbHeader - sizeof(DWORD);
-
-    if (0 == SetFilePointerEx(hFile, Lar, NULL, FILE_BEGIN))
+    LARGE_INTEGER ll;
+    ll.QuadPart = cbHeader - sizeof(DWORD);
+    if (0 == SetFilePointerEx(hFile, ll, NULL, FILE_BEGIN))
     {
         hr = HRESULT_FROM_WIN32(GetLastError());
     }
-
-    // Write the data size.
-
-    if (SUCCEEDED(hr))
-    {
+    if (SUCCEEDED(hr)) {
         hr = WriteToFile(hFile, &cbAudioData, sizeof(cbAudioData));
     }
-
-    if (SUCCEEDED(hr))
-    {
-        // Write the file size.
-        Lar.QuadPart = sizeof(DWORD);
-
-        if (0 == SetFilePointerEx(hFile, Lar, NULL, FILE_BEGIN))
+    if (SUCCEEDED(hr)) {
+        ll.QuadPart = sizeof(DWORD);
+        if (0 == SetFilePointerEx(hFile, ll, NULL, FILE_BEGIN))
         {
             hr = HRESULT_FROM_WIN32(GetLastError());
         }
     }
-
     if (SUCCEEDED(hr))
     {
+        ll.QuadPart = sizeof(DWORD);
+        if (0 == SetFilePointerEx(hFile, ll, NULL, FILE_BEGIN))
+        {
+            hr = HRESULT_FROM_WIN32(GetLastError());
+        }
+    }
+    if (SUCCEEDED(hr)) {
         DWORD cbRiffFileSize = cbHeader + cbAudioData - 8;
-
-        // NOTE: The "size" field in the RIFF header does not include
-        // the first 8 bytes of the file. i.e., it is the size of the
-        // data that appears _after_ the size field.
-
         hr = WriteToFile(hFile, &cbRiffFileSize, sizeof(cbRiffFileSize));
     }
-
     return hr;
 }
-
-
-
-//-------------------------------------------------------------------
 //
-// Writes a block of data to a file,This is a very basic standard function.
-//
-// hFile: Handle to the file.
-// p: Pointer to the buffer to write.
-// cb: Size of the buffer, in bytes.
-//
-//-------------------------------------------------------------------
 
-HRESULT WriteToFile(HANDLE hFile, void* p, DWORD cb)
-{
+HRESULT WriteToFile(HANDLE hFile, void* p, DWORD cb) {
     DWORD cbWritten = 0;
     HRESULT hr = S_OK;
-
     BOOL bResult = WriteFile(hFile, p, cb, &cbWritten, NULL);
-    if (!bResult)
-    {
+    if (!bResult) {
         hr = HRESULT_FROM_WIN32(GetLastError());
     }
     return hr;
+
 }
-
-
 void OnFileOpen(HWND hwnd)
-{    
+{
     HRESULT hr = S_OK;
 
-    IFileOpenDialog *pFileOpen = NULL;
-    IShellItem *pItem = NULL;
+    IFileOpenDialog* pFileOpen = NULL;
+    IShellItem* pItem = NULL;
 
     // Create the FileOpenDialog object.
     hr = CoCreateInstance(
-        __uuidof(FileOpenDialog), 
-        NULL, 
-        CLSCTX_INPROC_SERVER, 
+        __uuidof(FileOpenDialog),
+        NULL,
+        CLSCTX_INPROC_SERVER,
         IID_PPV_ARGS(&pFileOpen)
-        );
-	if (FAILED(hr)) { goto done; }
+    );
+    if (FAILED(hr)) { goto done; }
 
 
     hr = pFileOpen->SetTitle(L"please select a source media file");
@@ -784,12 +622,12 @@ void OnFileOpen(HWND hwnd)
     if (FAILED(hr)) { goto done; }
 
     hr = pItem->GetDisplayName(SIGDN_URL, &wszSourceFile);
-	if (FAILED(hr)) { goto done; }
+    if (FAILED(hr)) { goto done; }
 
 done:
     if (FAILED(hr))
     {
-        MessageBox(hwnd,L"you can not open any file", L"message",NULL);
+        MessageBox(hwnd, L"you can not open any file", L"message", NULL);
     }
 
     if (pItem)
@@ -802,43 +640,62 @@ done:
     }
 }
 
-void OnPaint(HWND hWnd)
+
+
+void TransCode()
 {
-    PAINTSTRUCT ps;
-	HDC hdc;
-	           //background image
-	           BITMAPFILEHEADER *pBmfh = NULL;
-	           BITMAPINFO *pBmi= NULL;
-	           BYTE *pBits= NULL;
-	           FILE    * ifp;
-			   int i,j;
-	           const char * filename= "groundimage.bmp";
-	           static unsigned char mybuf[1330000];
-               int  cxDib, cyDib;
-			   
-	           //open this image file
-	           ifp = fopen(filename,"r");
-			   fread(mybuf,1330000,1,ifp);
-			   //information
-			   pBmfh = (BITMAPFILEHEADER *) mybuf;
-			   pBmi  = (BITMAPINFO *) (pBmfh + 1) ;
-               pBits = (BYTE *) pBmfh + pBmfh->bfOffBits ; 
-	           if (pBmi->bmiHeader.biSize == sizeof (BITMAPCOREHEADER))
-               {
-                    cxDib = ((BITMAPCOREHEADER *) pBmi)->bcWidth ;
-                    cyDib = ((BITMAPCOREHEADER *) pBmi)->bcHeight ;
-               }
-               else
-               {
-                    cxDib =      pBmi->bmiHeader.biWidth ;
-                    cyDib = abs (pBmi->bmiHeader.biHeight) ;
-		       }
-	           /////////////////////////////////////////////////////////////////
-    //display the background image
-	hdc = BeginPaint(hWnd, &ps);
-		SetDIBitsToDevice(hdc,0,0,cxDib,cyDib,0,0,0,cyDib,pBits,pBmi,DIB_RGB_COLORS);
-	    //for(i=10;i<255;i++)
-			//for(j=10;j<255;j++)
-			//SetPixel(hdc,30+j,30+i,RGB(i,j,i));
-	EndPaint(hWnd, &ps);
+    HRESULT hr = S_OK;
+    //////////////////////////////////////////////////
+    // Create the source reader to read the input file.
+    if (SUCCEEDED(hr))
+    {
+        hr = MFCreateSourceReaderFromURL(
+            //L"http://netclass.csu.edu.cn/jpkc2012/csu/multimedia/jalx/mmx.wmv",
+            wszSourceFile,
+            NULL,
+            &pReader
+        );
+
+        if (FAILED(hr))
+        {
+            return;
+        }
+    }
+    // open the output wave file so as to write decoded data
+    if (SUCCEEDED(hr))
+    {
+        hFile = CreateFile(
+            wszTargetFile,
+            GENERIC_WRITE,
+            FILE_SHARE_READ,
+            NULL,
+            CREATE_ALWAYS,
+            0,
+            NULL
+        );
+
+        if (hFile == INVALID_HANDLE_VALUE)
+        {
+            hr = HRESULT_FROM_WIN32(GetLastError());
+            return;
+        }
+    }
+    // write wave file
+    if (SUCCEEDED(hr))
+    {
+        hr = WriteWaveFile(pReader, hFile, MAX_AUDIO_DURATION_MSEC);
+    }
+
+    if (FAILED(hr))
+    {
+        return;
+    }
+    // close file
+    if (hFile != INVALID_HANDLE_VALUE)
+    {
+        CloseHandle(hFile);
+    }
+
+    SafeRelease(&pReader);
+    ///////////////////////////////////
 }
